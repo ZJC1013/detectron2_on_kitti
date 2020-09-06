@@ -25,19 +25,21 @@ from detectron2.utils.visualizer import Visualizer
 
 
 def register_dataset_instance(image_dir, gt_dir, splits=["train", "val"], dataset_name="cityscapes", from_json=True):
-    # use Cityscapes annotation format as metadata
-    # CITYSCAPES_THING_CLASSES = ["person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
-    meta = builtin_meta._get_builtin_metadata("cityscapes")
-
     for split in splits:
+        # use Cityscapes annotation format as metadata
+        # CITYSCAPES_THING_CLASSES = ["person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
+        meta = builtin_meta._get_builtin_metadata("cityscapes")
+
         dataset_instance_name = str(dataset_name) + "_instance_" + str(split)
+        image_split_dir = os.path.join(image_dir, split)
+        gt_split_dir = os.path.join(gt_dir, split)
         # from_json = True if ground truth json annotation file is available
         DatasetCatalog.register(dataset_instance_name,
-                                lambda: load_cityscapes_instances(image_dir+split, gt_dir+split,
-                                                                  from_json=from_json, to_polygons=True))
-        MetadataCatalog.get(dataset_instance_name).set(image_dir=image_dir+split, gt_dir=gt_dir+split,
+                                lambda x=image_split_dir, y=gt_split_dir: load_cityscapes_instances(
+                                    x, y, from_json=from_json, to_polygons=True))
+        MetadataCatalog.get(dataset_instance_name).set(image_dir=image_split_dir, gt_dir=gt_split_dir,
                                                        evaluator_type="cityscapes_instance", **meta)
-        print("finish registering dataset_{} to DatasetCatalog.".format(split))
+        print("finish registering {} to DatasetCatalog.".format(dataset_instance_name))
 
 
 class MyTrainer(DefaultTrainer):
@@ -123,8 +125,8 @@ def main(args):
 
     dataset_root_dir = args.dataset_dir
     dataset_name = dataset_root_dir.split('/')[-1]
-    image_dir = dataset_root_dir + "/data_semantics/"
-    gt_dir = dataset_root_dir + "/gtFine/"
+    image_dir = os.path.join(dataset_root_dir, "data_semantics/")
+    gt_dir = os.path.join(dataset_root_dir, "gtFine/")
 
     # Register Dataset
     splits = ["train", "val"] if args.do_eval else ["train"]
@@ -154,10 +156,11 @@ def main(args):
         cfg.MODEL.WEIGHTS = args.ckpt_path
 
     # config training parameters
-    cfg.SOLVER.IMS_PER_BATCH = 8
+    cfg.SOLVER.IMS_PER_BATCH = 16
     cfg.SOLVER.BASE_LR = 0.01
+    cfg.SOLVER.GAMMA = 0.1
+    cfg.SOLVER.STEPS = (10000, 20000)  # iteration numbers to decrease learning rate by SOLVER.GAMMA
     cfg.SOLVER.MAX_ITER = 30000
-    cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512  # default 512
 
     # choose trainer
     trainer = MyTrainer(cfg)
